@@ -1,0 +1,1180 @@
+{
+  "id": "da782045-1f8c-40f5-aac5-0e2ceb02cbe3",
+  "revision": 0,
+  "last_node_id": 17,
+  "last_link_id": 21,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "PreviewImage",
+      "pos": [
+        11743.378881495326,
+        2730.144298032749
+      ],
+      "size": [
+        140,
+        246
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.44.1",
+        "Node name for S&R": "PreviewImage"
+      }
+    },
+    {
+      "id": 2,
+      "type": "AnyTileBatchSamplerCustom",
+      "pos": [
+        10803.127544932273,
+        2589.7945503283904
+      ],
+      "size": [
+        267.650708107128,
+        546.2917595687663
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 2
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 3
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 4
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 5
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 6
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": 7
+        },
+        {
+          "name": "layout",
+          "shape": 7,
+          "type": "ANYTILE_LAYOUT",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": []
+        },
+        {
+          "name": "tiles_image",
+          "type": "IMAGE",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "Node name for S&R": "AnyTileBatchSamplerCustom"
+      },
+      "widgets_values": [
+        1,
+        true
+      ],
+      "widgets_values_named": {
+        "tile_batch": 1,
+        "接缝延续": true
+      }
+    },
+    {
+      "id": 3,
+      "type": "ManualSigmas",
+      "pos": [
+        10066.340654185578,
+        3023.7496579971516
+      ],
+      "size": [
+        695.8778894670704,
+        115.82314006031856
+      ],
+      "flags": {
+        "disabled": false
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "sigmas",
+          "name": "sigmas",
+          "type": "STRING",
+          "widget": {
+            "name": "sigmas"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "label": "SIGMAS",
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.39.0",
+        "Node name for S&R": "ManualSigmas",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "1.0, 0.978453, 0.954180, 0.926626, 0.895080, 0.845148, 0.704534, 0.414568, 0.300000,0.150000,0.080000,0"
+      ],
+      "widgets_values_named": {
+        "sigmas": "1.0, 0.978453, 0.954180, 0.926626, 0.895080, 0.845148, 0.704534, 0.414568, 0.300000,0.150000,0.080000,0"
+      }
+    },
+    {
+      "id": 4,
+      "type": "KSamplerSelect",
+      "pos": [
+        10374.04744815219,
+        2900.2101236496187
+      ],
+      "size": [
+        290,
+        70
+      ],
+      "flags": {
+        "collapsed": false,
+        "disabled": false
+      },
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "采样器",
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.39.0",
+        "Node name for S&R": "KSamplerSelect",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "euler_ancestral"
+      ],
+      "widgets_values_named": {
+        "sampler_name": "euler_ancestral"
+      },
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 6,
+      "type": "AnyTilePerTileTextEncode",
+      "pos": [
+        9958.470579061062,
+        2682.6428712173074
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 9
+        },
+        {
+          "name": "tile_images",
+          "type": "IMAGE",
+          "link": 10
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            13
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": []
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "Node name for S&R": "AnyTilePerTileTextEncode"
+      },
+      "widgets_values": [
+        "去除噪点，高质量图像，重绘图像，修复图像，增加质感",
+        "自动"
+      ],
+      "widgets_values_named": {
+        "prompt": "去除噪点，高质量图像，重绘图像，修复图像，增加质感",
+        "ref_image_size": "自动"
+      }
+    },
+    {
+      "id": 7,
+      "type": "BasicGuider",
+      "pos": [
+        10446.53179728439,
+        2750.10347494502
+      ],
+      "size": [
+        285,
+        50
+      ],
+      "flags": {
+        "disabled": false
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "模型",
+          "name": "model",
+          "type": "MODEL",
+          "link": 12
+        },
+        {
+          "label": "条件",
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "label": "引导",
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.39.0",
+        "Node name for S&R": "BasicGuider",
+        "widget_ue_connectable": {}
+      }
+    },
+    {
+      "id": 8,
+      "type": "AnyTileMerge",
+      "pos": [
+        11133.385834619005,
+        2617.5827064858527
+      ],
+      "size": [
+        210,
+        170
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "tiles",
+          "type": "IMAGE",
+          "link": 14
+        },
+        {
+          "name": "layout",
+          "type": "ANYTILE_LAYOUT",
+          "link": 15
+        },
+        {
+          "name": "背景图",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "merged_image",
+          "type": "IMAGE",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "Node name for S&R": "AnyTileMerge"
+      },
+      "widgets_values": [
+        1,
+        3,
+        3,
+        true
+      ],
+      "widgets_values_named": {
+        "颜色还原强度": 1,
+        "遮罩拓展百分比": 3,
+        "遮罩羽化百分比": 3,
+        "丢弃接缝贴片": true
+      }
+    },
+    {
+      "id": 9,
+      "type": "CLIPLoader",
+      "pos": [
+        9236.816774129238,
+        2802.0128526034287
+      ],
+      "size": [
+        330,
+        110
+      ],
+      "flags": {
+        "disabled": false
+      },
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.37.0",
+        "Node name for S&R": "CLIPLoader",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "qwen3vl_8b_int8_convrot.safetensors",
+        "qwen_image",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+        "type": "qwen_image",
+        "device": "default"
+      },
+      "color": "#346279",
+      "bgcolor": "#204e65"
+    },
+    {
+      "id": 10,
+      "type": "VAELoader",
+      "pos": [
+        9231.891907791334,
+        2966.0278793358452
+      ],
+      "size": [
+        330,
+        70
+      ],
+      "flags": {
+        "disabled": false
+      },
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            7,
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.37.0",
+        "Node name for S&R": "VAELoader",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "qwen_image_2.1_vae_bf16.safetensors"
+      ],
+      "widgets_values_named": {
+        "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+      },
+      "color": "#346279",
+      "bgcolor": "#204e65"
+    },
+    {
+      "id": 11,
+      "type": "UNETLoader",
+      "pos": [
+        9234.846827594076,
+        2649.0579328006907
+      ],
+      "size": [
+        330,
+        100
+      ],
+      "flags": {
+        "disabled": false
+      },
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "模型",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.37.0",
+        "Node name for S&R": "UNETLoader",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      },
+      "color": "#346279",
+      "bgcolor": "#204e65"
+    },
+    {
+      "id": 12,
+      "type": "RAMCleanup",
+      "pos": [
+        11404.786631421948,
+        2604.7783008456277
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "任意",
+          "name": "anything",
+          "shape": 7,
+          "type": "*",
+          "link": 17
+        },
+        {
+          "label": "清理文件缓存",
+          "name": "clean_file_cache",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "clean_file_cache"
+          },
+          "link": null
+        },
+        {
+          "label": "清理进程内存",
+          "name": "clean_processes",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "clean_processes"
+          },
+          "link": null
+        },
+        {
+          "label": "清理未使用的 DLL",
+          "name": "clean_dlls",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "clean_dlls"
+          },
+          "link": null
+        },
+        {
+          "label": "重试次数",
+          "name": "retry_times",
+          "type": "INT",
+          "widget": {
+            "name": "retry_times"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "label": "输出",
+          "name": "output",
+          "type": "*",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "title": "释放内存",
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "cnr_id": "comfyui_memory_cleanup",
+        "ver": "58de13a6090e04408e343501ff8902c034d9f518",
+        "Node name for S&R": "RAMCleanup"
+      },
+      "widgets_values": [
+        true,
+        true,
+        true,
+        3
+      ],
+      "widgets_values_named": {
+        "clean_file_cache": true,
+        "clean_processes": true,
+        "clean_dlls": true,
+        "retry_times": 3
+      }
+    },
+    {
+      "id": 13,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        9590.49279699947,
+        2647.030372710995
+      ],
+      "size": [
+        276.04569756744786,
+        89.4176425797109
+      ],
+      "flags": {
+        "disabled": false
+      },
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "模型",
+          "name": "model",
+          "type": "MODEL",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "label": "模型",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.39.2",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "qwen\\High quality.safetensors",
+        0.4
+      ],
+      "widgets_values_named": {
+        "lora_name": "qwen\\High quality.safetensors",
+        "strength_model": 0.4
+      },
+      "color": "#54726c",
+      "bgcolor": "#405e58"
+    },
+    {
+      "id": 15,
+      "type": "RandomNoise",
+      "pos": [
+        10468.860712508542,
+        2599.9814479238985
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.44.1",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        747714843905941,
+        "fixed"
+      ],
+      "widgets_values_named": {
+        "noise_seed": 747714843905941,
+        "control_after_generate": "fixed"
+      }
+    },
+    {
+      "id": 16,
+      "type": "PreviewImage",
+      "pos": [
+        8783.69922829476,
+        2614.9398022362157
+      ],
+      "size": [
+        221.46425595954224,
+        401.9583432565282
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.44.1",
+        "Node name for S&R": "PreviewImage"
+      }
+    },
+    {
+      "id": 17,
+      "type": "AnyTileSplit",
+      "pos": [
+        8429.398586273606,
+        2635.6767419847056
+      ],
+      "size": [
+        301.0988541938441,
+        382
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "name": "upscale_model",
+          "shape": 7,
+          "type": "UPSCALE_MODEL",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "tile_images",
+          "type": "IMAGE",
+          "links": [
+            10,
+            20
+          ]
+        },
+        {
+          "name": "tiles_latent",
+          "type": "LATENT",
+          "links": []
+        },
+        {
+          "name": "upscaled_image",
+          "type": "IMAGE",
+          "links": [
+            16
+          ]
+        },
+        {
+          "name": "layout",
+          "type": "ANYTILE_LAYOUT",
+          "links": [
+            8,
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "version": "8.0.1",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "title_regex": null,
+          "input_regex": null,
+          "group_regex": null,
+          "title_regex_invert": false,
+          "input_regex_invert": false,
+          "group_regex_invert": false,
+          "apply_to_unrepeated": 0,
+          "send_to_any": 0,
+          "string_to_combo": 0,
+          "repeated_type_rule": 0,
+          "group_restricted": 0,
+          "color_restricted": 0
+        },
+        "Node name for S&R": "AnyTileSplit"
+      },
+      "widgets_values": [
+        "目标分辨率",
+        8,
+        4096,
+        "1024",
+        128,
+        "lanczos",
+        0,
+        true,
+        0.05,
+        0.1,
+        true,
+        0.5
+      ],
+      "widgets_values_named": {
+        "scale_mode": "目标分辨率",
+        "放大倍数": 8,
+        "目标分辨率": 4096,
+        "tile_size": "1024",
+        "overlap": 128,
+        "interp": "lanczos",
+        "overlap_y": 0,
+        "利用率优先": true,
+        "目标容差": 0.05,
+        "非等比预算": 0.1,
+        "拉回目标": true,
+        "接缝贴片比例": 0.5
+      }
+    }
+  ],
+  "links": [
+    [
+      2,
+      15,
+      0,
+      2,
+      0,
+      "NOISE"
+    ],
+    [
+      3,
+      7,
+      0,
+      2,
+      1,
+      "GUIDER"
+    ],
+    [
+      4,
+      4,
+      0,
+      2,
+      2,
+      "SAMPLER"
+    ],
+    [
+      5,
+      3,
+      0,
+      2,
+      3,
+      "SIGMAS"
+    ],
+    [
+      6,
+      6,
+      2,
+      2,
+      4,
+      "LATENT"
+    ],
+    [
+      7,
+      10,
+      0,
+      2,
+      5,
+      "VAE"
+    ],
+    [
+      8,
+      17,
+      3,
+      2,
+      6,
+      "ANYTILE_LAYOUT"
+    ],
+    [
+      9,
+      9,
+      0,
+      6,
+      0,
+      "CLIP"
+    ],
+    [
+      10,
+      17,
+      0,
+      6,
+      1,
+      "IMAGE"
+    ],
+    [
+      11,
+      10,
+      0,
+      6,
+      2,
+      "VAE"
+    ],
+    [
+      12,
+      13,
+      0,
+      7,
+      0,
+      "MODEL"
+    ],
+    [
+      13,
+      6,
+      0,
+      7,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      14,
+      2,
+      1,
+      8,
+      0,
+      "IMAGE"
+    ],
+    [
+      15,
+      17,
+      3,
+      8,
+      1,
+      "ANYTILE_LAYOUT"
+    ],
+    [
+      16,
+      17,
+      2,
+      8,
+      2,
+      "IMAGE"
+    ],
+    [
+      17,
+      8,
+      0,
+      12,
+      0,
+      "IMAGE"
+    ],
+    [
+      18,
+      11,
+      0,
+      13,
+      0,
+      "MODEL"
+    ],
+    [
+      20,
+      17,
+      0,
+      16,
+      0,
+      "IMAGE"
+    ],
+    [
+      21,
+      12,
+      0,
+      1,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Group",
+      "bounding": [
+        9221.891907791334,
+        2579.0579328006925,
+        672.0828415755823,
+        466.9699465351623
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ue_links": [],
+    "ds": {
+      "scale": 0.47362440744767365,
+      "offset": [
+        -7882.1296963229815,
+        -1835.579299140702
+      ]
+    },
+    "frontendVersion": "1.57.6",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4,
+  "seed_widgets": {
+    "15": 0
+  }
+}

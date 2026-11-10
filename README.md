@@ -81,6 +81,16 @@ LoadImage → AnyTileSplit(接 vae) → tiles_latent → AnyTileBatchSamplerCust
                                      AnyTileMerge(tiles, layout, 背景图=upscaled_image)
 ```
 
+## 示例工作流
+
+[`examples/qwen-image-2.1-tile-sampling.json`](examples/qwen-image-2.1-tile-sampling.json) —— Qwen-Image 2.1 turbo 的分块放大 / 修图流程，拖进 ComfyUI 画布即可。
+
+- 切分：目标长边 4096 / tile 1024 / overlap 128，`利用率优先` 与 `拉回目标` 全开
+- 采样：`tile_batch=1`、接缝延续开（euler_ancestral + 12 档 ManualSigmas）
+- 拼接：颜色还原 1.0、遮罩拓展/羽化 3%、`丢弃接缝贴片` 开
+
+需自备模型：`qwen_image_2.1_turbo_int8_convrot`(UNET)、`qwen_image_2.1_vae_bf16`(VAE)、`qwen3vl_8b_int8_convrot`(CLIP)、`High quality`(LoRA, 0.4)。
+
 ## 调参
 
 | 目标 | 做法 |
