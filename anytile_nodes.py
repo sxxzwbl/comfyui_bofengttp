@@ -874,7 +874,7 @@ def _match_tile_color(tile_np, ref_np, strength, stats=None):
     增益f = (1.0 + (增益 - 1.0) * 混合强度).astype(np.float32)
     偏移f = (偏移 * 混合强度).astype(np.float32)
     if stats is not None:
-        stats["mode"] = "强制(放大)"
+        stats["mode"] = "还原"
         stats["samples"] = int(len(源))
         stats["gain"] = tuple(round(float(g), 3) for g in 增益f)
         stats["offset"] = tuple(round(float(o) * 255.0, 1) for o in 偏移f)
@@ -1084,22 +1084,19 @@ class AnyTileMerge:
         out = canvas / weight.clamp_min(1e-6)
         if 校色记录:
             import statistics as _st
-            modes = {}
-            for _, s in 校色记录:
-                modes[s["mode"]] = modes.get(s["mode"], 0) + 1
             g_med = [_st.median([s["gain"][k] for _, s in 校色记录]) for k in range(3)]
             o_med = [_st.median([s["offset"][k] for _, s in 校色记录]) for k in range(3)]
             zero = all(abs(g - 1.0) < 0.002 for g in g_med) and all(abs(o) < 0.5 for o in o_med)
             log.info(
-                "[AnyTile] 颜色还原: %d块 | 模式 %s | 中位增益 %.3f/%.3f/%.3f 偏移 %+.1f/%+.1f/%+.1f 级%s",
-                len(校色记录), modes,
+                "[AnyTile] 颜色还原: %d块 | 中位增益 %.3f/%.3f/%.3f 中位偏移 %+.1f/%+.1f/%+.1f 级%s",
+                len(校色记录),
                 g_med[0], g_med[1], g_med[2], o_med[0], o_med[1], o_med[2],
-                " (几乎无偏色, 参考图与tile基本一致)" if zero else "",
+                " (无偏色可校: 参考图与采样结果基本一致)" if zero else "",
             )
             if zero and len(校色记录) > 1:
                 log.warning(
-                    "[AnyTile] 颜色还原几乎未生效: 背景图与 tile 本身来自同一张图(参考=插值放大版), 无偏色可校;"
-                    " 若成片仍有块间色差, 说明色差来自采样器/VAE 而非可线性校正的整体偏移, 请提高 遮罩拓展/羽化 让接缝过渡更宽"
+                    "[AnyTile] 颜色还原几乎未生效: 背景图与采样结果几乎一致, 没有整体偏色可校;"
+                    " 若成片仍有块间色差, 那是采样/VAE 的局部差异(非线性), 请提高 遮罩拓展/羽化 让过渡更宽"
                 )
         if bg is not None:
             # 画布模式背景: 未被tile全权重覆盖的区域平滑融回背景图
