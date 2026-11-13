@@ -838,6 +838,8 @@ def _match_tile_color(tile_np, ref_np, strength, stats=None):
     import cv2
     if strength <= 0:
         return tile_np
+    # 通道拆分: 只校前 3 通道, 其余(alpha)原样带回, 保证输出通道数与输入一致
+    额外通道 = tile_np[..., 3:]
     if tile_np.shape[-1] > 3:
         tile_np = tile_np[..., :3]
     if ref_np.shape[-1] > 3:
@@ -881,6 +883,8 @@ def _match_tile_color(tile_np, ref_np, strength, stats=None):
     校正 = np.empty_like(tile_np)
     for 起点 in range(0, 高, 256):
         校正[起点:起点 + 256] = np.clip(tile_np[起点:起点 + 256] * 增益f + 偏移f, 0.0, 1.0)
+    if 额外通道.shape[-1] > 0:
+        校正 = np.concatenate([校正, 额外通道], axis=-1)
     return 校正
 
 
@@ -1038,17 +1042,15 @@ class AnyTileMerge:
             r, c = divmod(i, cols)
             sx0 = strip_x if c > 0 else 0      # 左侧被贴过(有左邻)
             sy0 = strip_y if r > 0 else 0      # 顶部被贴过(有上邻)
-            # 1) 颜色还原: 与背景对应区域鲁棒校色 (孤海裁剪恢复同款; 背景可为画布或原始tile)
-            if has_bg_ref and 颜色还原强度 > 0:
+            # 1) 颜色还原(tile 模式): 背景图接 tile_images 时, 第 i 块对第 i 块逐块校色
+            #    能吸收"每块各自偏色不同"的情况; 画布模式(upscaled_image)在拼接完成后统一做全图校色
+            if bg_tiles is not None and 颜色还原强度 > 0:
                 tile_np = np.array(t.numpy(), copy=True)
-                ref_np = (np.ascontiguousarray(bg_tiles[i].numpy()) if bg_tiles is not None
-                          else np.ascontiguousarray(bg[y : y + th, x : x + tw, :].numpy()))
-                if sx0 or sy0:
-                    # 污染区先换成参考内容, 避免绿块把整块校色统计带偏
-                    ref_c = ref_np[..., :tile_np.shape[-1]]
-                    tile_np[:, :sx0] = ref_c[:, :sx0]
-                    tile_np[:sy0, :] = ref_c[:sy0, :]
+                ref_np = np.ascontiguousarray(bg_tiles[i].numpy())
                 st = {}
+                # 注意: 这里绝不能先改动 tile 再校色 —— 换掉外缘(不同块的污染区大小不同)
+                # 会让每块的统计样本不对称, 导致同排相邻块被施加不同的增益 -> 拼接出现色阶台阶。
+                # 污染区交给 IRLS 的 Tukey 权重自动剔除即可。
                 t = torch.from_numpy(_match_tile_color(tile_np, ref_np, 颜色还原强度, stats=st))
                 if st:
                     校色记录.append((i, st))
@@ -1082,13 +1084,38 @@ class AnyTileMerge:
             weight[y : y + th, x : x + tw, :] += w2
 
         out = canvas / weight.clamp_min(1e-6)
+        if bg is not None:
+            # 画布模式背景: 未被tile全权重覆盖的区域平滑融回背景图
+            alpha = weight.clamp(0.0, 1.0)
+            out = out * alpha + bg * (1.0 - alpha)
+
+        # ---- 全图颜色还原 (画布模式) ----
+        # 接 upscaled_image 时参考就是整张放大图, 因此对拼好的整图统一估一组增益/偏移。
+        # 一组参数作用到全图 -> 块与块之间不可能出现色阶台阶(逐块各估一套才会)。
+        if bg is not None and 颜色还原强度 > 0:
+            st = {}
+            out = torch.from_numpy(_match_tile_color(out.numpy(), bg[..., :out.shape[-1]].numpy(),
+                                                     颜色还原强度, stats=st))
+            g = st.get("gain", (1.0, 1.0, 1.0))
+            o = st.get("offset", (0.0, 0.0, 0.0))
+            zero = all(abs(v - 1.0) < 0.002 for v in g) and all(abs(v) < 0.5 for v in o)
+            log.info(
+                "[AnyTile] 颜色还原(全图): 增益 %.3f/%.3f/%.3f 偏移 %+.1f/%+.1f/%+.1f 级%s",
+                g[0], g[1], g[2], o[0], o[1], o[2],
+                " (无偏色可校)" if zero else "",
+            )
+            if zero:
+                log.warning(
+                    "[AnyTile] 全图颜色还原几乎未生效: 参考图与拼接结果统计上一致;"
+                    " 若仍看到接缝色阶, 那是逐块采样/VAE 的局部差异(块内不同色调), 请提高 遮罩羽化百分比"
+                )
         if 校色记录:
             import statistics as _st
             g_med = [_st.median([s["gain"][k] for _, s in 校色记录]) for k in range(3)]
             o_med = [_st.median([s["offset"][k] for _, s in 校色记录]) for k in range(3)]
             zero = all(abs(g - 1.0) < 0.002 for g in g_med) and all(abs(o) < 0.5 for o in o_med)
             log.info(
-                "[AnyTile] 颜色还原: %d块 | 中位增益 %.3f/%.3f/%.3f 中位偏移 %+.1f/%+.1f/%+.1f 级%s",
+                "[AnyTile] 颜色还原(逐块): %d块 | 中位增益 %.3f/%.3f/%.3f 中位偏移 %+.1f/%+.1f/%+.1f 级%s",
                 len(校色记录),
                 g_med[0], g_med[1], g_med[2], o_med[0], o_med[1], o_med[2],
                 " (无偏色可校: 参考图与采样结果基本一致)" if zero else "",
@@ -1098,10 +1125,6 @@ class AnyTileMerge:
                     "[AnyTile] 颜色还原几乎未生效: 背景图与采样结果几乎一致, 没有整体偏色可校;"
                     " 若成片仍有块间色差, 那是采样/VAE 的局部差异(非线性), 请提高 遮罩拓展/羽化 让过渡更宽"
                 )
-        if bg is not None:
-            # 画布模式背景: 未被tile全权重覆盖的区域平滑融回背景图
-            alpha = weight.clamp(0.0, 1.0)
-            out = out * alpha + bg * (1.0 - alpha)
         # 恢复目标: 尾块约束把 target 改写为画布值(切分时两轴缩幅不同会破坏宽高比),
         # 此处拉回约束前的原始目标尺寸——比例与分辨率一并恢复;
         # 未约束场景 original==target, 等价于 overlap 吸收缩回; 老 layout 无记录不缩放
