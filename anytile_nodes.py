@@ -1,4 +1,4 @@
-﻿# AnyTile 图像切分放大插件 (bofengttp)
+# AnyTile 图像切分放大插件 (bofengttp)
 # 节点组:
 #   AnyTileSplit       - 图片等比放大到目标分辨率后, 切分为带重叠的 tile 批次 (image + latent + layout)
 #   AnyTileBatchSampler - 把 tile latent 按"每批N个"分批采样并VAE解码, 避免大批次OOM
@@ -1033,6 +1033,18 @@ class AnyTileMerge:
         has_bg_ref = bg is not None or bg_tiles is not None
         if 颜色还原强度 > 0 and not has_bg_ref:
             log.warning("[AnyTile] 颜色还原需要接背景图(upscaled_image或tile_images), 本次跳过颜色还原")
+        if bg_tiles is not None and 颜色还原强度 > 0 and count > 0:
+            # 防呆: 背景图接成"采样解码后的 tiles_image"时, 参考就是输出本身, 校色必然恒等(静默无效)
+            probe_n = min(3, count)
+            same = all(
+                float((bg_tiles[k] - tiles_cpu[k]).abs().mean()) < 1e-4 for k in range(probe_n)
+            )
+            if same:
+                log.warning(
+                    "[AnyTile] 背景图与待拼接的tile完全相同 -> 颜色还原会是恒等变换(无效果)。"
+                    " 背景图请接 AnyTileSplit 的 tile_images(切分原图) 或 upscaled_image, "
+                    "不要接采样节点的 tiles_image(已解码输出)"
+                )
 
         # 遮罩拓展/羽化像素值: tile平均边长 × 百分比 / 100 (孤海同款换算)
         avg_side = (tw + th) / 2.0
