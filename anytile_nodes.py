@@ -1,4 +1,4 @@
-# AnyTile 图像切分放大插件 (bofengttp)
+﻿# AnyTile 图像切分放大插件 (bofengttp)
 # 节点组:
 #   AnyTileSplit       - 图片等比放大到目标分辨率后, 切分为带重叠的 tile 批次 (image + latent + layout)
 #   AnyTileBatchSampler - 把 tile latent 按"每批N个"分批采样并VAE解码, 避免大批次OOM
@@ -919,6 +919,65 @@ def _match_tile_color(tile_np, ref_np, strength, stats=None):
     return 校正
 
 
+def _match_tile_color_force(tile_np, ref_np, strength, stats=None):
+    """放大场景的强制校色: 无条件还原, 不存在"偏差大/样本少/残差大 -> 不校"的分支。
+
+    与 _match_tile_color(自动模式) 的差别:
+    - 候选 = 全图, 不做结构权重筛选(放大时 tile≈ref, 内容差异本就该由放大引入)
+    - 用 IRLS 的 Tukey 权重抵抗离群(重绘块/边缘), 但权重全灭时退回普通最小二乘, 不放弃
+    - 结束后无条件应用, 只做数值安全钳制: 增益 0.5~2.0、偏移 ±0.5(±128级)
+    - 通道方差趋零(纯色块)时该通道增益=1, 只用偏移, 防止把噪声放大
+    适用于放大/精修(denoise 低、tile 内容应与参考一致); 局部重绘请用"自动"模式。
+    """
+    import cv2
+    if strength <= 0:
+        return tile_np
+    if tile_np.shape[-1] > 3:
+        tile_np = tile_np[..., :3]
+    if ref_np.shape[-1] > 3:
+        ref_np = ref_np[..., :3]
+    高, 宽 = tile_np.shape[:2]
+    比例 = min(1.0, 256.0 / max(高, 宽))
+    工作尺寸 = (max(1, round(宽 * 比例)), max(1, round(高 * 比例)))
+    源 = cv2.resize(tile_np, 工作尺寸, interpolation=cv2.INTER_AREA).reshape(-1, 3).astype(np.float64)
+    目标 = cv2.resize(ref_np, 工作尺寸, interpolation=cv2.INTER_AREA).reshape(-1, 3).astype(np.float64)
+
+    增益 = np.ones(3, dtype=np.float64)
+    偏移 = np.median(目标 - 源, axis=0)
+    权重 = np.ones(len(源), dtype=np.float64)
+    for _ in range(10):
+        残差 = 目标 - (源 * 增益 + 偏移)
+        中心 = np.median(残差, axis=0)
+        尺度 = np.maximum(np.median(np.abs(残差 - 中心), axis=0) * 1.4826, 0.004)
+        偏差 = np.max(np.abs(残差 - 中心) / (4.685 * 尺度), axis=1)
+        新权重 = np.maximum(1.0 - 偏差 ** 2, 0.0) ** 2
+        if 新权重.sum() < 64.0:
+            新权重 = np.ones(len(源), dtype=np.float64)   # 不放弃: 退回普通最小二乘
+        权重 = 新权重
+        w = 权重[:, None] / 权重.sum()
+        源均值 = (源 * w).sum(axis=0)
+        目标均值 = (目标 * w).sum(axis=0)
+        方差 = ((源 - 源均值) ** 2 * w).sum(axis=0)
+        协方差 = ((源 - 源均值) * (目标 - 目标均值) * w).sum(axis=0)
+        原始增益 = (协方差 + 1e-6) / (方差 + 1e-6)
+        增益 = np.clip(原始增益, 0.5, 2.0)
+        增益 = np.where(方差 < 1e-6, 1.0, 增益)      # 纯色通道不做增益
+        偏移 = np.clip(目标均值 - 源均值 * 增益, -0.5, 0.5)
+
+    混合强度 = min(float(strength), 1.0)
+    增益f = (1.0 + (增益 - 1.0) * 混合强度).astype(np.float32)
+    偏移f = (偏移 * 混合强度).astype(np.float32)
+    if stats is not None:
+        stats["mode"] = "强制(放大)"
+        stats["samples"] = int(len(源))
+        stats["gain"] = tuple(round(float(g), 3) for g in 增益f)
+        stats["offset"] = tuple(round(float(o) * 255.0, 1) for o in 偏移f)
+    校正 = np.empty_like(tile_np)
+    for 起点 in range(0, 高, 256):
+        校正[起点:起点 + 256] = np.clip(tile_np[起点:起点 + 256] * 增益f + 偏移f, 0.0, 1.0)
+    return 校正
+
+
 def _build_tile_mask(th, tw, margin_px, feather_px,
                      edge_left=False, edge_right=False, edge_top=False, edge_bottom=False):
     """tile贴回遮罩: 全权重核心向四边收缩margin_px(线性), 再高斯羽化feather_px。
@@ -961,6 +1020,10 @@ class AnyTileMerge:
                 "丢弃接缝贴片": ("BOOLEAN", {"default": True,
                                         "tooltip": "开=把采样时被贴过邻居内容的外缘条带(绿块/色偏区)整块丢弃, 由邻居补上; "
                                                    "仅当采样器开了接缝延续时需要; 走其它采样器时请关掉"}),
+                # 追加在末尾: 保证旧工作流的 widgets_values 顺序不错位
+                "还原模式": (["强制(放大)", "自动(重绘保护)"], {"default": "强制(放大)",
+                                        "tooltip": "强制(放大)=全图鲁棒回归, 无条件还原每块(不存在偏差大就不校的分支), 适合放大/精修; "
+                                                   "自动(重绘保护)=候选按内容差异筛选, 只校轻微偏色, 适合局部重绘"}),
             },
             "optional": {
                 "背景图": ("IMAGE", {"tooltip": "两种接法: ①切分节点的upscaled_image(画布尺寸)→颜色还原+tile边缘融回原图; ②切分节点的tile_images(原始tile批次)→仅作逐tile颜色还原参考"}),
@@ -982,7 +1045,7 @@ class AnyTileMerge:
     )
 
     def merge(self, tiles, layout, 背景图=None, 颜色还原强度=1.0, 遮罩拓展百分比=5, 遮罩羽化百分比=5,
-              丢弃接缝贴片=True):
+              丢弃接缝贴片=True, 还原模式="强制(放大)"):
         import cv2
 
         if not isinstance(layout, dict) or layout.get("type") != "anytile_layout":
@@ -1084,7 +1147,8 @@ class AnyTileMerge:
                     tile_np[:, :sx0] = ref_c[:, :sx0]
                     tile_np[:sy0, :] = ref_c[:sy0, :]
                 st = {}
-                t = torch.from_numpy(_match_tile_color(tile_np, ref_np, 颜色还原强度, stats=st))
+                校色函数 = _match_tile_color_force if str(还原模式).startswith("强制") else _match_tile_color
+                t = torch.from_numpy(校色函数(tile_np, ref_np, 颜色还原强度, stats=st))
                 if st:
                     校色记录.append((i, st))
 
@@ -1558,6 +1622,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 __all__ = ["AnyTileSplit", "AnyTileBatchSampler", "AnyTileBatchSamplerCustom", "AnyTileMerge",
            "AnyTilePerTileTextEncode",
            "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+
+
 
 
 
