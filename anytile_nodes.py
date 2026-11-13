@@ -985,19 +985,27 @@ class AnyTileMerge:
                 " 建议切分节点也接同一个VAE以从源头对齐尺寸", a_tw, a_th, tw, th,
             )
 
-        # 背景图双模式: 画布(W×H) 或 原始tile批次(数量×tile尺寸)
+        # 背景图模式由形状自动判定, 不看接的是哪个口:
+        #   整图  = batch==1 且 (H, W) == 画布尺寸  -> 全图匹配(一组增益/偏移)
+        #   分块  = batch==count 且 (th, tw) == tile 尺寸 -> 逐块一一对应
+        # 两者同时成立(单块铺满整图)时按整图处理, 结果等价且更符合直觉。
         bg = None        # 画布模式: 颜色还原参考 + 边缘融回
         bg_tiles = None  # tile批次模式: 仅逐tile颜色还原参考
         if bg_raw is not None:
             b = bg_raw
-            if int(b.shape[0]) == count and int(b.shape[1]) == th and int(b.shape[2]) == tw:
-                bg_tiles = b[:, :, :, :C]
-            elif int(b.shape[1]) == H and int(b.shape[2]) == W:
+            nb, bh, bw = int(b.shape[0]), int(b.shape[1]), int(b.shape[2])
+            is_canvas = (nb == 1 and bh == H and bw == W)
+            is_tiles = (nb == count and bh == th and bw == tw)
+            if is_canvas:
                 bg = b[0, :, :, :C]
+                log.info("[AnyTile] 背景图判定: 整图 %dx%d (1张) -> 全图匹配", bw, bh)
+            elif is_tiles:
+                bg_tiles = b[:, :, :, :C]
+                log.info("[AnyTile] 背景图判定: 分块 %d张 %dx%d -> 逐块一一对应", nb, bw, bh)
             else:
                 raise Exception(
-                    f"背景图尺寸不符: 需要 画布{W}x{H} 或 tile批次{count}块{tw}x{th}, "
-                    f"实际 {int(b.shape[2])}x{int(b.shape[1])}×{int(b.shape[0])}"
+                    f"背景图形状不符: 需要 整图=1张{W}x{H} 或 分块={count}张{tw}x{th}, "
+                    f"实际 {nb}张{bw}x{bh}。请接 AnyTileSplit 的 upscaled_image(整图) 或 tile_images(分块)"
                 )
         has_bg_ref = bg is not None or bg_tiles is not None
         if 颜色还原强度 > 0 and not has_bg_ref:
