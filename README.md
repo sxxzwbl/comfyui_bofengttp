@@ -1,4 +1,4 @@
-# comfyui_bofengttp — AnyTile 切分放大
+﻿# comfyui_bofengttp — AnyTile 切分放大
 
 把图按方形 tile 切分、分批采样、羽化拼回大图。核心是**画布正好铺满 tile 覆盖能力**：不为省一块 tile 缩小画布再拉伸，避免旧做法 10~12% 的隐藏失真。适用于 ComfyUI，仅依赖自带的 numpy / torch / PIL / cv2。
 
@@ -46,11 +46,10 @@ git clone https://github.com/sxxzwbl/comfyui_bofengttp.git
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `颜色还原强度` | 1.0 | 每块 tile 与参考图做逐通道增益 + 偏移校正；0 = 关闭 |
-| `还原模式` | 强制(放大) | **强制** = 全图鲁棒回归、无条件还原每块（没有"偏差大/样本少就不校"的退化分支），适合放大与精修；**自动** = 候选按内容差异筛选、只校轻微偏色，适合局部重绘 |
+| `颜色还原强度` | 1.0 | 每块 tile 与参考图做逐通道增益 + 偏移还原；样本=全图像素、无条件应用（不存在"偏差大/样本少就跳过"的分支）；0 = 关闭 |
 | `遮罩拓展百分比` / `遮罩羽化百分比` | 5 / 5 | 贴回遮罩的向内收缩与高斯羽化；接缝可见时加大 |
 | `丢弃接缝贴片` | true | 丢弃采样时继承邻居内容的外缘条带；仅当采样器开了接缝延续时需要 |
-| `背景图` | — | 接 `AnyTileSplit.tile_images`（未采样分块，第 i 块对第 i 块）或 `upscaled_image`（整图对应区域），两者参考等价；不接则不校色 |
+| `背景图` | — | 只接本节点的两个输出：`AnyTileSplit.tile_images`（未采样分块，第 i 块对第 i 块）或 `upscaled_image`（取同位置区域），两者参考等价；不接则不校色 |
 
 接错参考不会报错但校色恒等：把采样节点的 `tiles_image`（已解码输出）接进 `背景图` 时，节点会告警提示。
 
@@ -121,3 +120,4 @@ LoadImage → AnyTileSplit(接 vae) → tiles_latent → AnyTileBatchSamplerCust
 - 不走 `AnyTileBatchSamplerCustom` 而直接 layout 接拼接时，把 `丢弃接缝贴片` 关掉；
 - 仅支持单张图（`batch=1`）；非档位 tile 尺寸会有像素偏移；
 - 纵向块数 >1 且短边不是 tile 整数倍时，纵向重叠会被动加大（如实记录在 `overlap_y`），这是结构性代价，只能靠换档位消掉。
+
