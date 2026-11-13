@@ -1,4 +1,4 @@
-# AnyTile 图像切分放大插件 (bofengttp)
+﻿# AnyTile 图像切分放大插件 (bofengttp)
 # 节点组:
 #   AnyTileSplit       - 图片等比放大到目标分辨率后, 切分为带重叠的 tile 批次 (image + latent + layout)
 #   AnyTileBatchSampler - 把 tile latent 按"每批N个"分批采样并VAE解码, 避免大批次OOM
@@ -932,7 +932,7 @@ class AnyTileMerge:
                                                    "仅当采样器开了接缝延续时需要; 走其它采样器时请关掉"}),
             },
             "optional": {
-                "背景图": ("IMAGE", {"tooltip": "只接 AnyTileSplit 的两个输出: ①tile_images(未采样分块, 与待拼接tile一一对应); ②upscaled_image(画布尺寸, 取同位置区域). 不接则不校色"}),
+                "背景图": ("IMAGE", {"tooltip": "只接 AnyTileSplit 的 upscaled_image(1张整图, 画布尺寸). 全图统一估一组增益/偏移 -> 块间不会出现色阶台阶. 不接则不校色"}),
             }
         }
 
@@ -985,43 +985,23 @@ class AnyTileMerge:
                 " 建议切分节点也接同一个VAE以从源头对齐尺寸", a_tw, a_th, tw, th,
             )
 
-        # 背景图模式由形状自动判定, 不看接的是哪个口:
-        #   整图  = batch==1 且 (H, W) == 画布尺寸  -> 全图匹配(一组增益/偏移)
-        #   分块  = batch==count 且 (th, tw) == tile 尺寸 -> 逐块一一对应
-        # 两者同时成立(单块铺满整图)时按整图处理, 结果等价且更符合直觉。
-        bg = None        # 画布模式: 颜色还原参考 + 边缘融回
-        bg_tiles = None  # tile批次模式: 仅逐tile颜色还原参考
+        # 背景图只接受整图: 1 张且尺寸 = 画布。整图参考才能做"全图一组参数"的颜色还原;
+        # 逐块各估一套参数会让相邻块被施加不同增益, 接缝处必然出现色阶台阶。
+        bg = None
         if bg_raw is not None:
             b = bg_raw
             nb, bh, bw = int(b.shape[0]), int(b.shape[1]), int(b.shape[2])
-            is_canvas = (nb == 1 and bh == H and bw == W)
-            is_tiles = (nb == count and bh == th and bw == tw)
-            if is_canvas:
+            if nb == 1 and bh == H and bw == W:
                 bg = b[0, :, :, :C]
-                log.info("[AnyTile] 背景图判定: 整图 %dx%d (1张) -> 全图匹配", bw, bh)
-            elif is_tiles:
-                bg_tiles = b[:, :, :, :C]
-                log.info("[AnyTile] 背景图判定: 分块 %d张 %dx%d -> 逐块一一对应", nb, bw, bh)
+                log.info("[AnyTile] 背景图: 整图 %dx%d -> 全图匹配", bw, bh)
             else:
                 raise Exception(
-                    f"背景图形状不符: 需要 整图=1张{W}x{H} 或 分块={count}张{tw}x{th}, "
-                    f"实际 {nb}张{bw}x{bh}。请接 AnyTileSplit 的 upscaled_image(整图) 或 tile_images(分块)"
+                    f"背景图必须是 1 张整图 {W}x{H}（接 AnyTileSplit 的 upscaled_image）, "
+                    f"实际收到 {nb} 张 {bw}x{bh}。分块批次(tile_images)不再支持: "
+                    f"逐块还原会给每块不同的增益/偏移, 接缝处会出现色阶台阶"
                 )
-        has_bg_ref = bg is not None or bg_tiles is not None
-        if 颜色还原强度 > 0 and not has_bg_ref:
-            log.warning("[AnyTile] 颜色还原需要接背景图(upscaled_image或tile_images), 本次跳过颜色还原")
-        if bg_tiles is not None and 颜色还原强度 > 0 and count > 0:
-            # 防呆: 背景图接成"采样解码后的 tiles_image"时, 参考就是输出本身, 校色必然恒等(静默无效)
-            probe_n = min(3, count)
-            same = all(
-                float((bg_tiles[k] - tiles_cpu[k]).abs().mean()) < 1e-4 for k in range(probe_n)
-            )
-            if same:
-                log.warning(
-                    "[AnyTile] 背景图与待拼接的tile完全相同 -> 颜色还原会是恒等变换(无效果)。"
-                    " 背景图请接 AnyTileSplit 的 tile_images(切分原图) 或 upscaled_image, "
-                    "不要接采样节点的 tiles_image(已解码输出)"
-                )
+        if 颜色还原强度 > 0 and bg is None:
+            log.warning("[AnyTile] 颜色还原需要接背景图(upscaled_image), 本次跳过颜色还原")
 
         # 遮罩拓展/羽化像素值: tile平均边长 × 百分比 / 100 (孤海同款换算)
         avg_side = (tw + th) / 2.0
@@ -1031,7 +1011,6 @@ class AnyTileMerge:
 
         canvas = torch.zeros((H, W, C), dtype=torch.float32)
         weight = torch.zeros((H, W, 1), dtype=torch.float32)
-        校色记录 = []
 
         # 接缝贴片丢弃宽度: 采样阶段被贴过邻居内容的外缘(黄区), 解码后带绿块/色偏,
         # 这里整块不给权重 -> 该区域完全由邻居tile覆盖(融合带=重叠-贴片, 仍有两块内容可混)
@@ -1050,18 +1029,8 @@ class AnyTileMerge:
             r, c = divmod(i, cols)
             sx0 = strip_x if c > 0 else 0      # 左侧被贴过(有左邻)
             sy0 = strip_y if r > 0 else 0      # 顶部被贴过(有上邻)
-            # 1) 颜色还原(tile 模式): 背景图接 tile_images 时, 第 i 块对第 i 块逐块校色
-            #    能吸收"每块各自偏色不同"的情况; 画布模式(upscaled_image)在拼接完成后统一做全图校色
-            if bg_tiles is not None and 颜色还原强度 > 0:
-                tile_np = np.array(t.numpy(), copy=True)
-                ref_np = np.ascontiguousarray(bg_tiles[i].numpy())
-                st = {}
-                # 注意: 这里绝不能先改动 tile 再校色 —— 换掉外缘(不同块的污染区大小不同)
-                # 会让每块的统计样本不对称, 导致同排相邻块被施加不同的增益 -> 拼接出现色阶台阶。
-                # 污染区交给 IRLS 的 Tukey 权重自动剔除即可。
-                t = torch.from_numpy(_match_tile_color(tile_np, ref_np, 颜色还原强度, stats=st))
-                if st:
-                    校色记录.append((i, st))
+            # 颜色还原统一在拼接完成后按整图做一次(见下方), 这里不动单块,
+            # 避免相邻块拿到不同的增益/偏移而留下色阶台阶。
 
             # 2) 贴回遮罩: 拓展(核心收缩)+羽化; 未启用时保留与左/上邻实际重叠的线性羽化
             if use_mask:
@@ -1116,22 +1085,6 @@ class AnyTileMerge:
                 log.warning(
                     "[AnyTile] 全图颜色还原几乎未生效: 参考图与拼接结果统计上一致;"
                     " 若仍看到接缝色阶, 那是逐块采样/VAE 的局部差异(块内不同色调), 请提高 遮罩羽化百分比"
-                )
-        if 校色记录:
-            import statistics as _st
-            g_med = [_st.median([s["gain"][k] for _, s in 校色记录]) for k in range(3)]
-            o_med = [_st.median([s["offset"][k] for _, s in 校色记录]) for k in range(3)]
-            zero = all(abs(g - 1.0) < 0.002 for g in g_med) and all(abs(o) < 0.5 for o in o_med)
-            log.info(
-                "[AnyTile] 颜色还原(逐块): %d块 | 中位增益 %.3f/%.3f/%.3f 中位偏移 %+.1f/%+.1f/%+.1f 级%s",
-                len(校色记录),
-                g_med[0], g_med[1], g_med[2], o_med[0], o_med[1], o_med[2],
-                " (无偏色可校: 参考图与采样结果基本一致)" if zero else "",
-            )
-            if zero and len(校色记录) > 1:
-                log.warning(
-                    "[AnyTile] 颜色还原几乎未生效: 背景图与采样结果几乎一致, 没有整体偏色可校;"
-                    " 若成片仍有块间色差, 那是采样/VAE 的局部差异(非线性), 请提高 遮罩拓展/羽化 让过渡更宽"
                 )
         # 恢复目标: 尾块约束把 target 改写为画布值(切分时两轴缩幅不同会破坏宽高比),
         # 此处拉回约束前的原始目标尺寸——比例与分辨率一并恢复;
@@ -1551,6 +1504,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 __all__ = ["AnyTileSplit", "AnyTileBatchSampler", "AnyTileBatchSamplerCustom", "AnyTileMerge",
            "AnyTilePerTileTextEncode",
            "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+
+
 
 
 
