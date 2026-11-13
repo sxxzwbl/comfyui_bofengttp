@@ -825,11 +825,18 @@ class AnyTileBatchSampler:
 
 
 # ---------------------------------------------------------------- 拼接辅助: 颜色还原 + 遮罩拓展/羽化
-def _match_tile_color(tile_np, ref_np, strength):
-    """孤海-裁剪恢复同款颜色还原: 鲁棒增益+偏移统一校色 (输入/输出 HxWx3 float32 0-1)。
+def _match_tile_color(tile_np, ref_np, strength, stats=None):
+    """鲁棒增益+偏移校色 (孤海-裁剪恢复同款思路, 已修正失效路径)。
 
-    只采样"轻微偏色"的同位置像素(排除明显重绘区), 6轮中位数回归估计每通道
-    增益(钳制0.9~1.1)与偏移(钳制±24级), 按strength混合, 避免放大噪声。"""
+    旧版用"像素色差 <=24级"筛候选样本 —— 方向反了: 色差越大候选越少, 20级左右的
+    实际 VAE 偏色直接让候选归零, 函数静默 return 原图, 表现为"强度拉到 1 也没用"。
+    现版本:
+    - 候选只用"结构权重"(内容差异才是排除理由) + 亮度差 <=60级(排黑边/白块等极端离群)
+    - 色差大小不再作为排除条件, 增益/偏移钳制放宽到 0.8~1.3 / ±60级
+    - 增益回归越界(内容与参考根本不同)时退回"仅偏移"校正, 不做增益
+    - 候选不足时同样退化为全图"仅偏移"校正, 而不是放弃
+    stats: 可选 dict, 回填 applied/mode/gain/offset 供调用方打日志
+    """
     import cv2
     if strength <= 0:
         return tile_np
@@ -844,48 +851,68 @@ def _match_tile_color(tile_np, ref_np, strength):
     源 = cv2.resize(tile_np, 工作尺寸, interpolation=cv2.INTER_AREA)
     目标 = cv2.resize(ref_np, 工作尺寸, interpolation=cv2.INTER_AREA)
 
-    # 局部明暗结构基本不受整体偏色影响, 降低新增/移除轮廓的采样权重
+    # 局部明暗结构基本不受整体偏色影响, 用结构差筛候选(不含色差条件)
     源灰度 = cv2.cvtColor(源, cv2.COLOR_RGB2GRAY)
     目标灰度 = cv2.cvtColor(目标, cv2.COLOR_RGB2GRAY)
     源细节 = 源灰度 - cv2.GaussianBlur(源灰度, (0, 0), 1.5)
     目标细节 = 目标灰度 - cv2.GaussianBlur(目标灰度, (0, 0), 1.5)
     结构权重 = 1.0 / (1.0 + ((源细节 - 目标细节) / 0.02) ** 2)
-    # 仅接受轻微偏色: RGB各通道最多差24级, 明度最多差18级(按0~255计)
-    候选区域 = (np.max(np.abs(目标 - 源), axis=2) <= 24.0 / 255.0)
-    候选区域 &= (np.abs(目标灰度 - 源灰度) <= 18.0 / 255.0) & (结构权重 > 0.8)
+    候选区域 = (结构权重 > 0.5) & (np.abs(目标灰度 - 源灰度) <= 60.0 / 255.0)
     候选区域 = cv2.erode(候选区域.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
-    最少样本 = max(16, 候选区域.size * 0.05)
-    if np.count_nonzero(候选区域) < 最少样本:
-        return tile_np
-    源样本 = 源[候选区域].astype(np.float64)
-    目标样本 = 目标[候选区域].astype(np.float64)
-    结构权重 = 结构权重[候选区域]
-    增益 = np.ones(3, dtype=np.float64)
-    偏移 = np.median(目标样本 - 源样本, axis=0)
-    for _ in range(6):
-        残差 = 目标样本 - (源样本 * 增益 + 偏移)
-        中心 = np.median(残差, axis=0)
-        尺度 = np.maximum(np.median(np.abs(残差 - 中心), axis=0) * 1.4826, 0.004)
-        偏差 = np.max(np.abs(残差 - 中心) / (4.685 * 尺度), axis=1)
-        权重 = np.maximum(1.0 - 偏差 ** 2, 0.0) ** 2 * 结构权重
-        权重和 = 权重.sum()
-        if 权重和 < max(16, len(源样本) * 0.1):
-            return tile_np
-        权重 = 权重[:, None] / 权重和
-        源均值 = (源样本 * 权重).sum(axis=0)
-        目标均值 = (目标样本 * 权重).sum(axis=0)
-        方差 = ((源样本 - 源均值) ** 2 * 权重).sum(axis=0)
-        协方差 = ((源样本 - 源均值) * (目标样本 - 目标均值) * 权重).sum(axis=0)
-        # 平坦背景缺少对比度信息, 增益回归1, 主要用偏移校正以免放大噪声
-        增益 = np.clip((协方差 + 1e-4) / (方差 + 1e-4), 0.9, 1.1)
-        偏移 = np.clip(目标均值 - 源均值 * 增益, -24.0 / 255.0, 24.0 / 255.0)
 
-    稳定区域 = (np.max(np.abs(目标样本 - (源样本 * 增益 + 偏移)), axis=1) < 0.035) & (结构权重 > 0.5)
-    if np.count_nonzero(稳定区域) < max(最少样本, len(源样本) * 0.6):
-        return tile_np
+    增益 = np.ones(3, dtype=np.float64)
+    偏移 = np.zeros(3, dtype=np.float64)
+    模式 = "增益+偏移"
+    样本数 = int(np.count_nonzero(候选区域))
+    最少样本 = max(64, int(候选区域.size * 0.01))
+    if 样本数 >= 最少样本:
+        源样本 = 源[候选区域].astype(np.float64)
+        目标样本 = 目标[候选区域].astype(np.float64)
+        结构权重 = 结构权重[候选区域]
+        偏移 = np.median(目标样本 - 源样本, axis=0)
+        for _ in range(8):
+            残差 = 目标样本 - (源样本 * 增益 + 偏移)
+            中心 = np.median(残差, axis=0)
+            尺度 = np.maximum(np.median(np.abs(残差 - 中心), axis=0) * 1.4826, 0.004)
+            偏差 = np.max(np.abs(残差 - 中心) / (4.685 * 尺度), axis=1)
+            权重 = np.maximum(1.0 - 偏差 ** 2, 0.0) ** 2 * 结构权重
+            权重和 = 权重.sum()
+            if 权重和 < max(16, len(源样本) * 0.05):
+                break
+            权重 = 权重[:, None] / 权重和
+            源均值 = (源样本 * 权重).sum(axis=0)
+            目标均值 = (目标样本 * 权重).sum(axis=0)
+            方差 = ((源样本 - 源均值) ** 2 * 权重).sum(axis=0)
+            协方差 = ((源样本 - 源均值) * (目标样本 - 目标均值) * 权重).sum(axis=0)
+            原始增益 = (协方差 + 1e-4) / (方差 + 1e-4)
+            # 增益越界(内容与参考根本不同 / 平坦区缺少对比度) -> 退化为纯偏移, 避免放大噪声
+            if np.any(原始增益 < 0.80) or np.any(原始增益 > 1.30):
+                增益 = np.ones(3, dtype=np.float64)
+                模式 = "仅偏移(增益越界)"
+            else:
+                增益 = 原始增益
+            偏移 = np.clip(目标均值 - 源均值 * 增益, -60.0 / 255.0, 60.0 / 255.0)
+        稳定区域 = (np.max(np.abs(目标样本 - (源样本 * 增益 + 偏移)), axis=1) < 0.035) & (结构权重 > 0.3)
+        if np.count_nonzero(稳定区域) < max(最少样本, len(源样本) * 0.30):
+            # 残差仍大 -> 只用偏移(中位数), 增益回退
+            增益 = np.ones(3, dtype=np.float64)
+            模式 = "仅偏移(残差大)"
+            偏移 = np.median(目标样本 - 源样本, axis=0)
+    else:
+        # 候选太少(强重绘/内容差异大): 全图降采样做纯偏移校正, 不改增益
+        源样本 = 源.reshape(-1, 3).astype(np.float64)
+        目标样本 = 目标.reshape(-1, 3).astype(np.float64)
+        偏移 = np.median(目标样本 - 源样本, axis=0)
+        模式 = "仅偏移(样本不足)"
+
     混合强度 = min(float(strength), 1.0)
     增益 = (1.0 + (增益 - 1.0) * 混合强度).astype(np.float32)
     偏移 = (偏移 * 混合强度).astype(np.float32)
+    if stats is not None:
+        stats["mode"] = 模式
+        stats["samples"] = 样本数
+        stats["gain"] = tuple(round(float(g), 3) for g in 增益)
+        stats["offset"] = tuple(round(float(o) * 255.0, 1) for o in 偏移)
     校正 = np.empty_like(tile_np)
     for 起点 in range(0, 高, 256):
         校正[起点:起点 + 256] = np.clip(tile_np[起点:起点 + 256] * 增益 + 偏移, 0.0, 1.0)
@@ -926,7 +953,7 @@ class AnyTileMerge:
                 "tiles": ("IMAGE", {"tooltip": "采样完成并解码后的tile图像批次 (顺序需与切分时一致; 尺寸与布局不一致时自动缩放对齐)"}),
                 "layout": (ANYTILE_LAYOUT, {"tooltip": "AnyTileSplit 输出的切分布局"}),
                 "颜色还原强度": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.1,
-                                        "tooltip": "孤海裁剪恢复同款: 每块tile与背景图对应区域比较, 统一修正明度/颜色; 0=关闭; 需接背景图"}),
+                                        "tooltip": "孤海裁剪恢复同款: 每块tile与背景图对应区域比较, 修正每通道增益+偏移; 候选样本按结构差异筛选(不看色差大小), 偏色大也能校; 无增益信息时只用偏移; 0=关闭; 需接背景图"}),
                 "遮罩拓展百分比": ("INT", {"default": 5, "min": 0, "max": 30, "step": 1,
                                         "tooltip": "tile贴回遮罩向内收缩, 像素=tile平均边长×%/100; 接缝过渡带会自动扩展到重叠区的60%以锚定原图, 此参数为下限; 0=全重叠线性羽化(旧行为)"}),
                 "遮罩羽化百分比": ("INT", {"default": 5, "min": 0, "max": 30, "step": 1,
@@ -1015,6 +1042,7 @@ class AnyTileMerge:
 
         canvas = torch.zeros((H, W, C), dtype=torch.float32)
         weight = torch.zeros((H, W, 1), dtype=torch.float32)
+        校色记录 = []
 
         # 接缝贴片丢弃宽度: 采样阶段被贴过邻居内容的外缘(黄区), 解码后带绿块/色偏,
         # 这里整块不给权重 -> 该区域完全由邻居tile覆盖(融合带=重叠-贴片, 仍有两块内容可混)
@@ -1043,7 +1071,10 @@ class AnyTileMerge:
                     ref_c = ref_np[..., :tile_np.shape[-1]]
                     tile_np[:, :sx0] = ref_c[:, :sx0]
                     tile_np[:sy0, :] = ref_c[:sy0, :]
-                t = torch.from_numpy(_match_tile_color(tile_np, ref_np, 颜色还原强度))
+                st = {}
+                t = torch.from_numpy(_match_tile_color(tile_np, ref_np, 颜色还原强度, stats=st))
+                if st:
+                    校色记录.append((i, st))
 
             # 2) 贴回遮罩: 拓展(核心收缩)+羽化; 未启用时保留与左/上邻实际重叠的线性羽化
             if use_mask:
@@ -1074,6 +1105,25 @@ class AnyTileMerge:
             weight[y : y + th, x : x + tw, :] += w2
 
         out = canvas / weight.clamp_min(1e-6)
+        if 校色记录:
+            import statistics as _st
+            modes = {}
+            for _, s in 校色记录:
+                modes[s["mode"]] = modes.get(s["mode"], 0) + 1
+            g_med = [_st.median([s["gain"][k] for _, s in 校色记录]) for k in range(3)]
+            o_med = [_st.median([s["offset"][k] for _, s in 校色记录]) for k in range(3)]
+            zero = all(abs(g - 1.0) < 0.002 for g in g_med) and all(abs(o) < 0.5 for o in o_med)
+            log.info(
+                "[AnyTile] 颜色还原: %d块 | 模式 %s | 中位增益 %.3f/%.3f/%.3f 偏移 %+.1f/%+.1f/%+.1f 级%s",
+                len(校色记录), modes,
+                g_med[0], g_med[1], g_med[2], o_med[0], o_med[1], o_med[2],
+                " (几乎无偏色, 参考图与tile基本一致)" if zero else "",
+            )
+            if zero and len(校色记录) > 1:
+                log.warning(
+                    "[AnyTile] 颜色还原几乎未生效: 背景图与 tile 本身来自同一张图(参考=插值放大版), 无偏色可校;"
+                    " 若成片仍有块间色差, 说明色差来自采样器/VAE 而非可线性校正的整体偏移, 请提高 遮罩拓展/羽化 让接缝过渡更宽"
+                )
         if bg is not None:
             # 画布模式背景: 未被tile全权重覆盖的区域平滑融回背景图
             alpha = weight.clamp(0.0, 1.0)
@@ -1496,6 +1546,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 __all__ = ["AnyTileSplit", "AnyTileBatchSampler", "AnyTileBatchSamplerCustom", "AnyTileMerge",
            "AnyTilePerTileTextEncode",
            "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+
 
 
 
